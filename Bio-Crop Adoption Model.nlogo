@@ -164,17 +164,14 @@ end
 to update-carbon-price
   let dt 1  ; time step (1 year)
 
-  ;; Generate two independent normal random variables
   let z1 random-normal 0 1
   let z2 random-normal 0 1
 
-  ;; Create correlated shocks using Cholesky decomposition
   let w_v z1
   let rho_squared (rho ^ 2)
   let correlation_term sqrt(1 - rho_squared)
   let w_s (rho * z1 + correlation_term * z2)
 
-  ;; Update variance using Euler discretization
   let v carbon-variance
   let mean_reversion (kappa * (theta - v) * dt)
   let variance_floor max(list v 0.0001)
@@ -183,18 +180,15 @@ to update-carbon-price
   let volatility_term (vol-of-vol * sqrt_variance * sqrt_dt * w_v)
   let new-v (v + mean_reversion + volatility_term)
 
-  ;; Enforce non-negativity constraint
   if new-v < 0 [ set new-v 0.0001 ]
   set carbon-variance new-v
 
-  ;; Update carbon price using geometric Brownian motion
   let drift_component ((carbon-drift - 0.5 * new-v) * dt)
   let sqrt_new_variance sqrt(new-v)
   let diffusion_component (sqrt_new_variance * sqrt_dt * w_s)
   let price_exponent (drift_component + diffusion_component)
   let new-price (carbon-price-per-ton * exp(price_exponent))
 
-  ;; Prevent numerical underflow
   if new-price <= 0 [ set new-price 0.01 ]
   set carbon-price-per-ton new-price
 end
@@ -274,7 +268,6 @@ to update-revenues
 
     let total-rev corn-rev + soy-rev + bio-rev
 
-    ; Store
     set revenue-history lput total-rev revenue-history
     set corn-revenue-history lput corn-rev corn-revenue-history
     set soy-revenue-history lput soy-rev soy-revenue-history
@@ -284,11 +277,9 @@ end
 
 to evaluate-bio-adoption
   ask turtles [
-    ; Calculate available conventional land for potential conversion
     let current-bio-share item 2 crop-allocation
     let available-for-conversion 1 - current-bio-share
 
-    ; Only proceed if there's conventional land available AND bio would be profitable
     if available-for-conversion <= 0.01 [ stop ]  ; Stop if <1% conventional land left
 
   let peer-adjustment 1
@@ -297,7 +288,6 @@ to evaluate-bio-adoption
   let total-weight 0
   let weighted-sum 0
 
-  ;; Loop through each peer using ask + let pattern
   ask my-peers [
     let d distance myself
     let w 1 / (d + 0.1)
@@ -312,7 +302,6 @@ to evaluate-bio-adoption
   set peer-adjustment exp (peer-effect-weight * peer-rate)
 ]
 
-    ; SUBSIDY AND CARBON CREDIT:
     let subsidy-income 0
     let carbon-income 0
     if subsidy-enabled [
@@ -329,7 +318,6 @@ to evaluate-bio-adoption
       set est-cost bio-cost-year1 - (bio-cost-year1 * subsidy-establish-pay% / 100)
     ]
 
-; CALCULATE BIO NPV with mean-variance utility
     let npv 0
     let base-r discount-rate / 100
     let t 1
@@ -340,11 +328,9 @@ to evaluate-bio-adoption
     ]
     set npv npv - est-cost
 
-    ; Calculate bio revenue variance from history
     let bio-rev-variance ifelse-value (length bio-revenue-history > 1) [variance bio-revenue-history] [0]
     let bio-utility npv - (my-alpha-risk * bio-rev-variance)
 
-    ; CONVENTIONAL CROPS NPV with mean-variance utility
     let npv-soy-corn 0
     let r_conv (discount-rate / 100)
     let t_conv 1
@@ -354,7 +340,6 @@ to evaluate-bio-adoption
       set t_conv t_conv + 1
     ]
 
-    ; Calculate conventional revenue variance from history
     let hist-corn sublist corn-revenue-history (max list 0 (length corn-revenue-history - 5)) (length corn-revenue-history)
     let hist-soy sublist soy-revenue-history (max list 0 (length soy-revenue-history - 5)) (length soy-revenue-history)
     let hist-conv sentence hist-corn hist-soy
@@ -363,7 +348,6 @@ to evaluate-bio-adoption
 
     let adjusted-bio-utility bio-utility * peer-adjustment
 
-    ; Decision based on utility comparison - but only convert available land
     if adjusted-bio-utility > conv-utility [
       let adoption-amount min (list 0.01 available-for-conversion)  ; 1% or remaining land
 
@@ -376,7 +360,6 @@ to evaluate-bio-adoption
       set shares replace-item 2 shares ((item 2 shares) + adoption-amount)
       set crop-allocation shares
 
-      ; Set bio-years only for new adoption (this might need rethinking for mixed land)
       if current-bio-share = 0 [
         set bio-years time-horizon
       ]
@@ -396,19 +379,16 @@ to update-crop-allocation
     let corn-profit last corn-revenue-history
     let soy-profit last soy-revenue-history
 
-    ; Reallocate remaining land based on relative profit
     if corn-profit + soy-profit > 0 [
       let corn-ratio corn-profit / (corn-profit + soy-profit)
       let soy-ratio 1 - corn-ratio
       let new-corn-share corn-ratio * remaining
       let new-soy-share soy-ratio * remaining
 
-;; Calculate switching amount (1% of total land per tick)
 let total-land 1
 let land-shift-rate 0.01
 let switchable-land land-shift-rate * total-land
 
-;; Only shift land if bio is more profitable
 if bio-years > 0 [
   ;; reduce from the less profitable crop (corn or soy)
   ifelse corn-profit > soy-profit [
@@ -419,7 +399,6 @@ if bio-years > 0 [
   set bio-share bio-share + switchable-land
 ]
 
-;; Re-normalize in case of rounding issues
 let total new-corn-share + new-soy-share + bio-share
 set crop-allocation (list (new-corn-share / total) (new-soy-share / total) (bio-share / total))
     ]
